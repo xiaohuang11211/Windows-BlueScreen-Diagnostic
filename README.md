@@ -45,11 +45,12 @@ Each report contains:
 
 ```text
 BlueScreen_Report.txt
+Chinese_Summary_CN.txt
 Script_Errors.txt
 Minidump\
 ```
 
-`Script_Errors.txt` is omitted when no module errors occurred.
+`Chinese_Summary_CN.txt` is the recommended first file for Chinese-speaking users. `Script_Errors.txt` is omitted when no module errors occurred.
 
 ## Collected Evidence
 
