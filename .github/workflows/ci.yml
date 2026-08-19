@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show Windows PowerShell version
+        shell: powershell
+        run: |
+          $PSVersionTable
+
+      - name: Test
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\test.ps1
+
+      - name: Build
+        shell: powershell
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts\build.ps1
+
+      - name: Verify dist
+        shell: powershell
+        run: |
+          if (-not (Test-Path -LiteralPath 'dist\Windows-BlueScreen-Diagnostic\BlueScreen_Check.ps1')) {
+            throw 'Build output is missing.'
+          }
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows-BlueScreen-Diagnostic
+          path: dist/Windows-BlueScreen-Diagnostic/

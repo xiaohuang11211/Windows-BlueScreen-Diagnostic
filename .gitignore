@@ -1,0 +1,10 @@
+BlueScreen_Report_*/
+*.dmp
+MEMORY.DMP
+dist/
+*.zip
+*.tmp
+*.log
+Script_Errors.txt
+*.user
+*.bak
