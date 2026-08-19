@@ -159,7 +159,7 @@ function Get-SafeWinEvent {
         }
         catch {
             $message = $_.Exception.Message
-            if ($message -match 'No events were found that match the specified selection criteria') {
+            if ($_.FullyQualifiedErrorId -match 'NoMatchingEventsFound' -or $message -match 'No events were found that match the specified selection criteria') {
                 continue
             }
             if ($message -match 'There is not an event provider') {
