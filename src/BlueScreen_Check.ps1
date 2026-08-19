@@ -18,14 +18,32 @@ if ([string]::IsNullOrWhiteSpace($desktop)) {
 }
 $Script:ReportRoot = Join-Path $desktop ("BlueScreen_Report_{0}" -f $timestamp)
 $Script:ReportFile = Join-Path $Script:ReportRoot 'BlueScreen_Report.txt'
+$Script:ChineseSummaryFile = Join-Path $Script:ReportRoot 'Chinese_Summary_CN.txt'
 $Script:ErrorFile = Join-Path $Script:ReportRoot 'Script_Errors.txt'
 $Script:ModuleFailures = New-Object System.Collections.Generic.List[string]
+$Script:StatusRecords = New-Object System.Collections.Generic.List[object]
 
 New-Item -ItemType Directory -Path $Script:ReportRoot -Force | Out-Null
 
 function Write-ReportLine {
     param([AllowNull()][string]$Text = '')
     Add-Content -LiteralPath $Script:ReportFile -Value $Text -Encoding UTF8
+}
+
+function Write-ChineseSummaryLine {
+    param([AllowNull()][string]$Text = '')
+    Add-Content -LiteralPath $Script:ChineseSummaryFile -Value $Text -Encoding UTF8
+}
+
+function ConvertFrom-Utf8Base64 {
+    param([string]$Text)
+    if ([string]::IsNullOrEmpty($Text)) { return '' }
+    return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($Text))
+}
+
+function Write-Zh {
+    param([string]$Text)
+    Write-ChineseSummaryLine (ConvertFrom-Utf8Base64 $Text)
 }
 
 function Write-Section {
@@ -41,6 +59,11 @@ function Write-Status {
         [string]$Status,
         [AllowNull()][string]$Message = ''
     )
+    [void]$Script:StatusRecords.Add([pscustomobject]@{
+        Name = $Name
+        Status = $Status
+        Message = $Message
+    })
     Write-ReportLine ("[{0}] {1}: {2}" -f $Status, $Name, $Message)
 }
 
@@ -235,6 +258,78 @@ function Get-NvidiaSmiEvidence {
     }
 }
 
+function Get-StatusRecord {
+    param([string]$Name)
+    $Script:StatusRecords | Where-Object { $_.Name -eq $Name } | Select-Object -Last 1
+}
+
+function Write-ChineseCheck {
+    param(
+        [string]$Title64,
+        [string]$StatusName,
+        [string]$NoEvents64,
+        [string]$Warning64
+    )
+    $title = ConvertFrom-Utf8Base64 $Title64
+    $noEvents = ConvertFrom-Utf8Base64 $NoEvents64
+    $warning = ConvertFrom-Utf8Base64 $Warning64
+    $record = Get-StatusRecord -Name $StatusName
+    if ($null -eq $record) {
+        Write-ChineseSummaryLine ("- {0}: not recorded." -f $title)
+        return
+    }
+    if ($record.Status -eq 'WARNING') {
+        Write-ChineseSummaryLine ("- {0}: {1}" -f $title, $warning)
+    }
+    elseif ($record.Status -eq 'FAILED') {
+        Write-ChineseSummaryLine ("- {0}: {1}" -f $title, (ConvertFrom-Utf8Base64 '6L+Z6aG55qOA5rWL5omn6KGM5aSx6LSl77yM5bu66K6u5p+l55yLIFNjcmlwdF9FcnJvcnMudHh044CC'))
+    }
+    elseif ($record.Status -eq 'NOT_AVAILABLE') {
+        Write-ChineseSummaryLine ("- {0}: {1}" -f $title, (ConvertFrom-Utf8Base64 '5b2T5YmN57O757uf5rKh5pyJ5o+Q5L6b6L+Z6aG55L+h5oGv77yM6YCa5bi45LiN5Luj6KGo5pWF6Zqc44CC'))
+    }
+    else {
+        Write-ChineseSummaryLine ("- {0}: {1}" -f $title, $noEvents)
+    }
+}
+
+function Write-ChineseSummary {
+    Write-Zh '6JOd5bGP6K+K5pat5Lit5paH5pGY6KaB'
+    Write-ChineseSummaryLine ((ConvertFrom-Utf8Base64 '55Sf5oiQ5pe26Ze077yaezB9') -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
+    Write-ChineseSummaryLine ((ConvertFrom-Utf8Base64 '5oql5ZGK55uu5b2V77yaezB9') -f $Script:ReportRoot)
+    Write-ChineseSummaryLine ''
+
+    $failed = @($Script:StatusRecords | Where-Object { $_.Status -eq 'FAILED' })
+    $majorSignals = @($Script:StatusRecords | Where-Object {
+        $_.Status -eq 'WARNING' -and $_.Name -in @('BugCheck Event ID 1001','Kernel-Power Event ID 41','Unexpected Shutdown Event ID 6008','WHEA Logger','GPU Display/nvlddmkm','Storage disk/nvme/ahci/ntfs','Minidump','MEMORY.DMP')
+    })
+
+    Write-Zh '5YWI55yL57uT6K6677ya'
+    if ($failed.Count -gt 0) {
+        Write-Zh '6L+Z5qyh6ISa5pys5pyJ6YOo5YiG6aG555uu5rKh5pyJ5p+l5oiQ5Yqf77yM5LiN6IO95oqK5aSx6LSl6aG555uu5b2T5oiQ4oCc5rKh5pyJ6Zeu6aKY4oCd44CC6K+35p+l55yLIFNjcmlwdF9FcnJvcnMudHh044CC'
+    }
+    elseif ($majorSignals.Count -eq 0) {
+        Write-Zh '6L+Z5qyh5rKh5pyJ5Y+R546w5piO5pi+55qE6JOd5bGP44CB56Gs5Lu26ZSZ6K+v44CB5pi+5Y2h6amx5Yqo6ZSZ6K+v44CB56Gs55uY6ZSZ6K+v5oiWIER1bXAg5paH5Lu257q/57Si44CC'
+        Write-Zh '5aaC5p6c5L2g5Y+q5piv5Li65LqG5rWL6K+V6ISa5pys5piv5ZCm6IO96L+Q6KGM77yM6YKj5LmI6L+Z5bGe5LqO5q2j5bi457uT5p6c44CC'
+    }
+    else {
+        Write-Zh '6L+Z5qyh5Y+R546w5LqG5LiA5Lqb6ZyA6KaB5YWz5rOo55qE6K6w5b2V44CC5a6D5Lus5Y+q5piv57q/57Si77yM5LiN562J5LqO5bey57uP56Gu6K6k5p+Q5Liq56Gs5Lu25o2f5Z2P44CC'
+    }
+
+    Write-ChineseSummaryLine ''
+    Write-Zh '5YWz6ZSu6aG555uu77ya'
+    Write-ChineseCheck '6JOd5bGP6K6w5b2V' 'BugCheck Event ID 1001' '6L+H5Y67IDMwIOWkqeayoeacieafpeWIsCBXaW5kb3dzIOiTneWxjyBCdWdDaGVjayDorrDlvZXjgII=' '5p+l5Yiw5LqG6JOd5bGPIEJ1Z0NoZWNrIOiusOW9le+8jOW7uuiurue7k+WQiOWPkeeUn+aXtumXtOWSjCBEdW1wIOaWh+S7tui/m+S4gOatpeWIhuaekOOAgg=='
+    Write-ChineseCheck '5byC5bi45pat55S15oiW5by65Yi26YeN5ZCv6K6w5b2V' 'Kernel-Power Event ID 41' '6L+H5Y67IDMwIOWkqeayoeacieafpeWIsCBLZXJuZWwtUG93ZXIgNDEg6K6w5b2V44CC5rOo5oSP77ya5Y2z5L2/5p+l5Yiw5a6D77yM5Lmf5Y+q6IO96K+05piO5pu+57uP6Z2e5q2j5bi45YWz5py65oiW6YeN5ZCv77yM5LiN6IO955u05o6l6K+05piO55S15rqQ5Z2P5LqG44CC' '5p+l5Yiw5LqGIEtlcm5lbC1Qb3dlciA0Me+8jOivtOaYjuezu+e7n+abvue7j+mdnuato+W4uOWFs+acuuaIlumHjeWQr++8m+Wug+S4jeiDveebtOaOpeivgeaYjueUtea6kOaNn+Wdj+OAgg=='
+    Write-ChineseCheck 'V0hFQSDnoazku7bplJnor68=' 'WHEA Logger' '6L+H5Y67IDMwIOWkqeayoeacieafpeWIsCBXSEVBIOehrOS7tumUmeivr+iusOW9leOAgg==' '5p+l5Yiw5LqGIFdIRUEg56Gs5Lu26ZSZ6K+v77yM6L+Z5piv6YeN6KaB57q/57Si77yM5Y+v6IO95LiOIENQVeOAgeWGheWtmOOAgVBDSWXjgIHkuLvmnb/jgIFCSU9TIOaIluebuOWFs+mpseWKqOacieWFs++8jOS9huS4jeiDveS7heWHrei/meS4gOmhueS4i+WumuiuuuOAgg=='
+    Write-ChineseCheck '5pi+5Y2h5oiWIE5WSURJQSDpqbHliqjkuovku7Y=' 'GPU Display/nvlddmkm' '6L+H5Y67IDMwIOWkqeayoeacieafpeWIsCBEaXNwbGF5L252bGRkbWttIOebuOWFs+S6i+S7tuOAgg==' '5p+l5Yiw5LqG5pi+5Y2h5oiWIE5WSURJQSDpqbHliqjnm7jlhbPkuovku7bvvIzpnIDopoHnu5PlkIjok53lsY/ml7bpl7TjgIHpqbHliqjniYjmnKzjgIHmuKnluqbjgIHkvpvnlLXlkozlvZPml7bov5DooYznmoTnqIvluo/liKTmlq3jgII='
+    Write-ChineseCheck '56Gs55uY44CBTlZNZeOAgVNBVEHjgIFOVEZTIOWtmOWCqOS6i+S7tg==' 'Storage disk/nvme/ahci/ntfs' '6L+H5Y67IDMwIOWkqeayoeacieafpeWIsOWMuemFjeeahOWtmOWCqOmUmeivr+S6i+S7tuOAgg==' '5p+l5Yiw5LqG5a2Y5YKo55u45YWz5LqL5Lu277yM5bu66K6u6L+b5LiA5q2l5qOA5p+l56Gs55uY5YGl5bq344CB5Zu65Lu244CB5o6l5Y+j44CB57q/5p2Q44CB5o6n5Yi25Zmo6amx5Yqo5ZKM5paH5Lu257O757uf44CC'
+    Write-ChineseCheck '5bCP5Z6L6L2s5YKoIE1pbmlkdW1w' 'Minidump' '5rKh5pyJ5Y+R546w5Y+v5aSN5Yi255qE5bCP5Z6L6JOd5bGP6L2s5YKo5paH5Lu244CC' '5Y+R546w5LqGIE1pbmlkdW1wIOaWh+S7tu+8jOiEmuacrOWPquWkjeWItuacgOi/kSA1IOS4quWIsOaKpeWRiuebruW9le+8jOWOn+Wni+aWh+S7tuayoeacieiiq+enu+WKqOaIluWIoOmZpOOAgg=='
+    Write-ChineseCheck '5a6M5pW05YaF5a2Y6L2s5YKoIE1FTU9SWS5ETVA=' 'MEMORY.DMP' '5rKh5pyJ5Y+R546wIE1FTU9SWS5ETVDjgII=' '5Y+R546w5LqGIE1FTU9SWS5ETVDvvIzkvYbohJrmnKzlj6rorrDlvZXlroPmmK/lkKblrZjlnKjlkozmlofku7blpKflsI/vvIzkuI3kvJrlpI3liLbov5nkuKrlpKfmlofku7bjgII='
+    Write-ChineseSummaryLine ''
+    Write-Zh '5YW25LuW5o+Q6YaS77ya'
+    Write-Zh '5aaC5p6c5p+Q6aG55YaZ552A4oCc5pyq5Y+R546w55u45YWz6K6w5b2V4oCd77yM5oSP5oCd5piv5oyJ5b2T5YmN5p2h5Lu25rKh5pyJ5p+l5Yiw77yM5LiN5Luj6KGo55S16ISR6KKr5YWo6Z2i6K+B5piO57ud5a+55rKh6Zeu6aKY44CC'
+    Write-Zh '5aaC5p6c5p+Q6aG55YaZ552A4oCc5qOA5rWL5aSx6LSl4oCd77yM6K+05piO6ISa5pys5rKh6IO95a6M5oiQ6YKj6aG55p+l6K+i77yM5LiN6IO95oqK5a6D55CG6Kej5oiQ5rKh5pyJ5byC5bi444CC'
+}
+
 Write-ReportLine 'Windows-BlueScreen-Diagnostic Report'
 Write-ReportLine ("ToolVersion={0}" -f $Script:Version)
 Write-ReportLine ("Generated={0}" -f (Get-Date -Format 's'))
@@ -306,6 +401,8 @@ Write-ReportLine 'Summary is evidence-only. It identifies signals that may need 
 Write-ReportLine 'If WHEA events are present, investigate CPU, RAM, PCIe devices, motherboard, BIOS settings, and related drivers with timestamps.'
 Write-ReportLine 'If nvlddmkm or Display events are present, correlate with blue screen time, GPU driver version, temperatures, power state, and workload.'
 Write-ReportLine 'If storage events are present, correlate with disk health, firmware, controller driver, cabling, and file system timestamps.'
+
+Write-ChineseSummary
 
 Write-Host "Report created: $Script:ReportRoot"
 exit 0
