@@ -114,30 +114,65 @@ function Get-SafeWinEvent {
         [datetime]$StartTime,
         [int]$MaxEvents = 50
     )
-    try {
-        $filter = @{ LogName = $LogName; StartTime = $StartTime }
-        if ($ProviderName) { $filter.ProviderName = $ProviderName }
-        if ($Id) { $filter.Id = $Id }
-        if ($Level) { $filter.Level = $Level }
-        $events = Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction Stop
-        if ($null -eq $events -or @($events).Count -eq 0) {
-            Write-Status -Name $Name -Status NO_EVENTS -Message "No matching events since $($StartTime.ToString('s'))."
+    $allEvents = @()
+    $notAvailable = New-Object System.Collections.Generic.List[string]
+    $providersToQuery = @($ProviderName)
+    if (-not $ProviderName) { $providersToQuery = @($null) }
+
+    foreach ($provider in $providersToQuery) {
+        try {
+            $filter = @{ LogName = $LogName; StartTime = $StartTime }
+            if ($provider) { $filter.ProviderName = $provider }
+            if ($Id) { $filter.Id = $Id }
+            if ($Level) { $filter.Level = $Level }
+            $events = @(Get-WinEvent -FilterHashtable $filter -MaxEvents $MaxEvents -ErrorAction Stop)
+            if ($events.Count -gt 0) {
+                $allEvents += $events
+            }
+        }
+        catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
+            Write-Status -Name $Name -Status NOT_AVAILABLE -Message "Log not available: $LogName."
             return
         }
-        Write-Status -Name $Name -Status WARNING -Message ("Found {0} matching event(s)." -f @($events).Count)
-        foreach ($event in $events) {
-            Write-ReportLine ("TimeCreated={0}; Provider={1}; Id={2}; Level={3}" -f $event.TimeCreated, $event.ProviderName, $event.Id, $event.LevelDisplayName)
-            $message = ($event.Message -replace "`r?`n", ' ')
-            if ($message.Length -gt 800) { $message = $message.Substring(0, 800) + '...' }
-            Write-ReportLine ("Message={0}" -f $message)
-            Write-ReportLine ''
+        catch {
+            $message = $_.Exception.Message
+            if ($message -match 'No events were found that match the specified selection criteria') {
+                continue
+            }
+            if ($message -match 'There is not an event provider') {
+                if ($provider) { [void]$notAvailable.Add($provider) }
+                continue
+            }
+            Write-ScriptError -Module $Name -Command "Get-WinEvent -FilterHashtable" -Message $message
+            return
         }
     }
-    catch [System.Diagnostics.Eventing.Reader.EventLogNotFoundException] {
-        Write-Status -Name $Name -Status NOT_AVAILABLE -Message "Log not available: $LogName."
+
+    $allEvents = @($allEvents | Sort-Object TimeCreated -Descending | Select-Object -First $MaxEvents)
+    if ($allEvents.Count -eq 0) {
+        if ($notAvailable.Count -gt 0 -and $notAvailable.Count -eq $providersToQuery.Count) {
+            Write-Status -Name $Name -Status NOT_AVAILABLE -Message ("Provider(s) not available: {0}." -f ($notAvailable -join ', '))
+        }
+        else {
+            $suffix = ''
+            if ($notAvailable.Count -gt 0) {
+                $suffix = " Provider(s) not available: {0}." -f ($notAvailable -join ', ')
+            }
+            Write-Status -Name $Name -Status NO_EVENTS -Message ("No matching events since {0}.{1}" -f $StartTime.ToString('s'), $suffix)
+        }
+        return
     }
-    catch {
-        Write-ScriptError -Module $Name -Command "Get-WinEvent -FilterHashtable" -Message $_.Exception.Message
+
+    Write-Status -Name $Name -Status WARNING -Message ("Found {0} matching event(s)." -f $allEvents.Count)
+    if ($notAvailable.Count -gt 0) {
+        Write-Status -Name "$Name provider availability" -Status NOT_AVAILABLE -Message ("Provider(s) not available: {0}." -f ($notAvailable -join ', '))
+    }
+    foreach ($event in $allEvents) {
+        Write-ReportLine ("TimeCreated={0}; Provider={1}; Id={2}; Level={3}" -f $event.TimeCreated, $event.ProviderName, $event.Id, $event.LevelDisplayName)
+        $message = ($event.Message -replace "`r?`n", ' ')
+        if ($message.Length -gt 800) { $message = $message.Substring(0, 800) + '...' }
+        Write-ReportLine ("Message={0}" -f $message)
+        Write-ReportLine ''
     }
 }
 
